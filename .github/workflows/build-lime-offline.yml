@@ -80,6 +80,14 @@ jobs:
                   raise SystemExit(f"Expected v6.1.38 whitespace anchor not found: {label}")
               s = s.replace(old, new, 1)
           p.write_text(s, encoding="utf-8")
+
+          q = Path(os.environ["LIME_ROOT"]) / "LimeStudio/app/src/main/java/org/limeime/LIMEService.java"
+          t = q.read_text(encoding="utf-8")
+          old = '    public void onFinishInput() {\n\n        if (DEBUG) {\n            Log.i(TAG, "onFinishInput()");\n        }\n'
+          new = '    public void onFinishInput() {\n        if (DEBUG) {\n            Log.i(TAG, "onFinishInput()");\n        }\n'
+          if old not in t:
+              raise SystemExit("Expected v6.1.38 LIMEService whitespace anchor not found: onFinishInput")
+          q.write_text(t.replace(old, new, 1), encoding="utf-8")
           PY
 
       - name: Apply feature and privacy patches

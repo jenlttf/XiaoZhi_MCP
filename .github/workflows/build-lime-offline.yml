@@ -24,6 +24,8 @@ jobs:
 
       - name: Set up Android SDK tools
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Install Android 37 SDK
         shell: bash

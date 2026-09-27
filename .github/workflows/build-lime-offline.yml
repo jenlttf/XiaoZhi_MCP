@@ -128,7 +128,7 @@ jobs:
         run: |
           set -euo pipefail
           STOREPASS="$(openssl rand -hex 24)"
-          KEYPASS="$(openssl rand -hex 24)"
+          KEYPASS="$STOREPASS"
           keytool -genkeypair -v             -keystore "$RUNNER_TEMP/lime-offline.jks"             -storepass "$STOREPASS"             -keypass "$KEYPASS"             -alias limeoffline             -keyalg RSA -keysize 3072 -validity 3650             -dname "CN=LIME HD Offline Custom,O=Local Privacy Build,C=TW"
           cat > "$RUNNER_TEMP/limeime/LimeStudio/keystore.properties" <<EOF
           storeFile=$RUNNER_TEMP/lime-offline.jks

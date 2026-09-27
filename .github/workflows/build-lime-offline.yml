@@ -48,6 +48,23 @@ jobs:
           base64 -d lime-build/apply_offline_hardening.py.gz.b64 | gzip -dc > "$RUNNER_TEMP/lime-patches/apply_offline_hardening.py"
           python3 -m py_compile "$RUNNER_TEMP"/lime-patches/*.py
 
+      - name: Normalize official v6.1.38 patch anchor
+        shell: bash
+        env:
+          LIME_ROOT: ${{ runner.temp }}/limeime
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path(os.environ["LIME_ROOT"]) / "LimeStudio/app/src/main/java/org/limeime/SearchServer.java"
+          s = p.read_text(encoding="utf-8")
+          old = "    private static List<Mapping> scorelist = Collections.synchronizedList(new ArrayList<>());\n\n    //Jeremy '15,6,2 preserve the exact match mapping with the code user typed.\n"
+          new = "    private static List<Mapping> scorelist = Collections.synchronizedList(new ArrayList<>());\n    //Jeremy '15,6,2 preserve the exact match mapping with the code user typed.\n"
+          if old not in s:
+              raise SystemExit("Expected v6.1.38 whitespace anchor not found")
+          p.write_text(s.replace(old, new, 1), encoding="utf-8")
+          PY
+
       - name: Apply feature and privacy patches
         shell: bash
         run: |

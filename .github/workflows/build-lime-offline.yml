@@ -96,6 +96,17 @@ jobs:
           python3 "$RUNNER_TEMP/lime-patches/apply_character_chain.py" "$RUNNER_TEMP/limeime"
           python3 "$RUNNER_TEMP/lime-patches/apply_boshiamy_lookup.py" "$RUNNER_TEMP/limeime"
           python3 "$RUNNER_TEMP/lime-patches/apply_offline_hardening.py" "$RUNNER_TEMP/limeime"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path(os.environ["RUNNER_TEMP"]) / "limeime/LimeStudio/app/src/main/java/org/limeime/LIMEService.java"
+          s = p.read_text(encoding="utf-8")
+          old = "primaryCode == MY_KEYCODE_SPACE || primaryCode == MY_KEYCODE_DELETE"
+          new = "primaryCode == MY_KEYCODE_SPACE || primaryCode == LIMEBaseKeyboard.KEYCODE_DELETE"
+          if s.count(old) != 1:
+              raise SystemExit(f"Expected exactly one legacy delete-key symbol, found {s.count(old)}")
+          p.write_text(s.replace(old, new, 1), encoding="utf-8")
+          PY
 
       - name: Static privacy gates before build
         shell: bash

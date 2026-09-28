@@ -1,1 +1,1 @@
-Trigger after removing obsolete Android tools package.
+voice-preserving offline rebuild trigger 2026-09-28

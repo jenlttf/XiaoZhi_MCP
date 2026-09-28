@@ -25,13 +25,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install Android 37 SDK
+      - name: Install Android 36 SDK
         shell: bash
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+          "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Checkout official LIME HD v6.1.38
         shell: bash
@@ -120,6 +120,8 @@ jobs:
           gradle = root / "LimeStudio/app/build.gradle"
           s = gradle.read_text(encoding="utf-8")
           s = s.replace('applicationId "org.limeime"', 'applicationId "org.limeime.offlinecustom"')
+          s = s.replace("compileSdkVersion 37", "compileSdkVersion 36")
+          s = s.replace("targetSdkVersion 37", "targetSdkVersion 36")
           s = s.replace("versionCode 202661380", "versionCode 202661381")
           s = s.replace("versionName 'v6.1.38'", "versionName 'v6.1.38-offlinecustom1'")
           gradle.write_text(s, encoding="utf-8")
@@ -158,7 +160,7 @@ jobs:
           test -n "$APK"
           mkdir -p out
           cp "$APK" out/LIMEHD-v6.1.38-offlinecustom1.apk
-          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump permissions "$APK" | tee out/permissions.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions "$APK" | tee out/permissions.txt
           ! grep -q "android.permission.INTERNET" out/permissions.txt
           ! grep -q "android.permission.ACCESS_NETWORK_STATE" out/permissions.txt
           grep -q "android.permission.RECORD_AUDIO" out/permissions.txt

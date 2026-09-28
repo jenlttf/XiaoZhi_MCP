@@ -1,0 +1,174 @@
+name: Build LIME HD offline custom APK
+
+on:
+  push:
+    branches:
+      - chatgpt-limehd-offline-build-20260928
+    paths:
+      - ".github/workflows/lime-offline-build.yml"
+      - "lime-build/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout build scripts
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 37 SDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-37" "build-tools;37.0.0"
+
+      - name: Checkout official LIME HD v6.1.38
+        shell: bash
+        run: |
+          git clone --depth 1 --branch v6.1.38 https://github.com/lime-ime/limeime.git lime-src
+
+      - name: Decode and apply requested feature patches
+        shell: bash
+        run: |
+          base64 -d lime-build/apply_character_chain.py.gz.b64 | gzip -d > /tmp/apply_character_chain.py
+          base64 -d lime-build/apply_boshiamy_lookup.py.gz.b64 | gzip -d > /tmp/apply_boshiamy_lookup.py
+          python3 /tmp/apply_character_chain.py "$GITHUB_WORKSPACE/lime-src"
+          python3 /tmp/apply_boshiamy_lookup.py "$GITHUB_WORKSPACE/lime-src"
+
+      - name: Apply offline privacy hardening
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("lime-src")
+          manifest = root / "LimeStudio/app/src/main/AndroidManifest.xml"
+          s = manifest.read_text(encoding="utf-8")
+          s = s.replace('    <uses-permission android:name="android.permission.INTERNET" />\n', '')
+          s = s.replace('    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n', '')
+          s = s.replace('android:allowBackup="true"', 'android:allowBackup="false"')
+          s = s.replace('        android:backupAgent=".LIMEBackupAgent"\n', '')
+          if 'android:usesCleartextTraffic=' not in s:
+              s = s.replace('        android:label="@string/app_name"\n',
+                            '        android:label="@string/app_name"\n        android:usesCleartextTraffic="false"\n', 1)
+          manifest.write_text(s, encoding="utf-8")
+
+          util = root / "LimeStudio/app/src/main/java/org/limeime/global/LIMEUtilities.java"
+          s = util.read_text(encoding="utf-8")
+          sig = '''\tpublic static File downloadRemoteFile(String url, File targetFile, File cacheDir, 
+          \t\t\tDownloadProgressCallback progressCallback, AbortFlagSupplier abortFlagSupplier) {
+          '''
+          guard = sig + '''\t\tif (isOfflineNetworkDisabled()) {
+          \t\t\tLog.w(TAG, "downloadRemoteFile(): blocked by offline safety build");
+          \t\t\treturn null;
+          \t\t}
+          '''
+          if guard not in s:
+              if sig not in s:
+                  raise SystemExit("LIMEUtilities download signature not found")
+              s = s.replace(sig, guard, 1)
+          helper = '''\n\tprivate static boolean isOfflineNetworkDisabled() {
+          \t\treturn true;
+          \t}\n'''
+          if helper.strip() not in s:
+              pos = s.rfind("\n}")
+              s = s[:pos] + helper + s[pos:]
+          util.write_text(s, encoding="utf-8")
+
+          ctrl = root / "LimeStudio/app/src/main/java/org/limeime/ui/controller/SetupImController.java"
+          s = ctrl.read_text(encoding="utf-8")
+          sig = '''    public void downloadAndImportZippedDb(String tableName, String url, boolean restoreLearning,
+                                                    Runnable onSuccess) {
+          '''
+          guard = sig + '''        if (isOfflineNetworkDisabled()) {
+                      handleError(settingsView, "Offline safety build: online IM downloads are disabled", null);
+                      return;
+                  }
+          '''
+          if guard not in s:
+              if sig not in s:
+                  raise SystemExit("SetupImController download method not found")
+              s = s.replace(sig, guard, 1)
+          helper = '''\n    private static boolean isOfflineNetworkDisabled() {
+                  return true;
+              }\n'''
+          if helper.strip() not in s:
+              pos = s.rfind("\n}")
+              s = s[:pos] + helper + s[pos:]
+          ctrl.write_text(s, encoding="utf-8")
+
+          news = root / "LimeStudio/app/src/main/java/org/limeime/ui/dialog/NewsDialog.java"
+          s = news.read_text(encoding="utf-8")
+          s = s.replace('newsContentArea.getSettings().setJavaScriptEnabled(true);',
+                        'newsContentArea.getSettings().setJavaScriptEnabled(false);\n'
+                        '\t\t\tnewsContentArea.getSettings().setBlockNetworkLoads(true);\n'
+                        '\t\t\tnewsContentArea.getSettings().setAllowFileAccess(false);\n'
+                        '\t\t\tnewsContentArea.getSettings().setAllowContentAccess(false);')
+          news.write_text(s, encoding="utf-8")
+
+          gradle = root / "LimeStudio/app/build.gradle"
+          s = gradle.read_text(encoding="utf-8")
+          s = s.replace('applicationId "org.limeime"', 'applicationId "org.limeime.offlinecustom"')
+          s = s.replace("versionCode 202661380", "versionCode 202661381")
+          s = s.replace("versionName 'v6.1.38'", "versionName 'v6.1.38-offlinecustom1'")
+          gradle.write_text(s, encoding="utf-8")
+
+          strings = root / "LimeStudio/app/src/main/res/values/strings.xml"
+          s = strings.read_text(encoding="utf-8")
+          s = s.replace('<string name="app_name">萊姆輸入法</string>',
+                        '<string name="app_name">LIME HD 安全自用版</string>')
+          strings.write_text(s, encoding="utf-8")
+
+          m = manifest.read_text(encoding="utf-8")
+          assert "android.permission.INTERNET" not in m
+          assert "android.permission.ACCESS_NETWORK_STATE" not in m
+          assert "android.permission.RECORD_AUDIO" in m
+          assert 'android:allowBackup="false"' in m
+          print("Offline hardening complete; voice permission preserved.")
+          PY
+
+      - name: Run unit tests
+        working-directory: lime-src/LimeStudio
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Build installable debug APK
+        working-directory: lime-src/LimeStudio
+        shell: bash
+        run: |
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Verify final APK is offline and voice remains enabled
+        shell: bash
+        run: |
+          APK="$(find lime-src/LimeStudio/app/build/outputs/apk/debug -name '*.apk' -type f | head -n1)"
+          test -n "$APK"
+          mkdir -p out
+          cp "$APK" out/LIMEHD-v6.1.38-offlinecustom1.apk
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump permissions "$APK" | tee out/permissions.txt
+          ! grep -q "android.permission.INTERNET" out/permissions.txt
+          ! grep -q "android.permission.ACCESS_NETWORK_STATE" out/permissions.txt
+          grep -q "android.permission.RECORD_AUDIO" out/permissions.txt
+          sha256sum out/LIMEHD-v6.1.38-offlinecustom1.apk | tee out/SHA256SUMS.txt
+          echo "PASS: APK has no network permission; RECORD_AUDIO preserved." | tee out/SAFETY.txt
+
+      - name: Upload APK and safety report
+        uses: actions/upload-artifact@v4
+        with:
+          name: LIMEHD-v6.1.38-offlinecustom1
+          path: out/
+          if-no-files-found: error
